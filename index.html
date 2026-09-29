@@ -204,6 +204,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
 .codeBig{margin:0 0 8px;font-size:16px}.codeBig b{font-size:26px;letter-spacing:4px;margin-left:6px}
 .nameRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nameShow{font-size:24px;font-weight:700;padding:8px 14px;border-radius:12px;background:var(--key);border:2px solid var(--line);flex:1;min-width:0}
+#netBanner{position:fixed;top:env(safe-area-inset-top,0px);left:50%;transform:translateX(-50%);z-index:30;background:var(--amber);color:#2a1b00;font-weight:600;padding:6px 14px;border-radius:0 0 12px 12px;font-size:14px;text-align:center;max-width:92%}
 </style>
 </head>
 <body>
@@ -245,7 +246,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <section id="dShare" class="dsec"><h3>2. Share this link with your pupils</h3>
       <p class="codeBig">Class code <b id="dCode"></b></p>
       <div class="linkrow"><input id="dLink" readonly aria-label="Game link"><button id="dCopy" class="mini-btn">Copy link</button></div>
-      <p class="note">Post it in your Teams channel or add it as a Website tab. Pupils type their name and land in the lobby. No accounts needed.</p></section>
+      <p class="note">Post it in your Teams channel or put it on the board. Pupils get a tank name and land in the lobby. No accounts needed.</p></section>
     <section id="dSetupWrap" class="dsec"><h3 id="dSetupTitle">1. Set up the game</h3><div id="dSetup"></div></section>
     <section id="dLobbyWrap" class="dsec"><h3>3. Lobby</h3><p class="sub" id="dLobbyCount"></p><div id="dLobby" class="row"></div></section>
     <section id="dLiveWrap" class="dsec"><div class="dhead"><h3>Pupils</h3><span id="dNeed" class="needc"></span></div>
@@ -255,10 +256,11 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <div class="dbtns"><button id="dOpen" class="bigBtn">Open the lobby</button><button id="dStart" class="bigBtn">⚔ Start the battle</button><button id="dRestart" class="bigBtn">Restart: open a new lobby</button><button id="dEnd" class="bigBtn ghost">End game now</button></div>
     <div class="saveNote" id="dSave"></div>
     <p class="note" id="dKeyNote"></p>
-    <div class="row"><button id="dPupil" class="linkBtn">Try it as a pupil</button><button id="dSwitch" class="linkBtn">New class</button></div>
+    <div class="row"><button id="dPupil" class="linkBtn">Try it as a pupil</button><button id="dSwitch" class="linkBtn">New class code</button></div>
   </aside>
 </div>
 
+<div id="netBanner" hidden></div>
 <div id="gate"><div class="card">
   <h1>Times Table Tanks</h1>
   <p id="gMsg"></p>
@@ -268,11 +270,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
   </div>
   <div id="gTeacher" hidden>
     <button id="gNew" class="bigBtn" style="width:100%;margin-top:14px">Set up a new game</button>
-    <details style="margin-top:16px"><summary>Open my class from another device</summary>
-      <label for="gCodeT">Class code</label><input id="gCodeT" maxlength="8" autocomplete="off">
-      <label for="gPinOld">Teacher key</label>
-      <div class="linkrow"><input id="gPinOld" autocomplete="off"><button id="gOpen" class="bigBtn">Open</button></div>
-      <p class="note">Both are shown at the bottom of your dashboard.</p></details>
+    <p class="note" style="margin-top:12px">Your class and its link are remembered on this computer, so use the same computer and browser each lesson.</p>
   </div>
   <div id="gSetup" hidden><h3>This copy isn’t connected yet</h3><p id="gSetupMsg">Add your Firebase settings to the file, as described in the setup guide.</p></div>
   <button id="gSolo" class="linkBtn">Practise on my own instead</button>
@@ -329,94 +327,126 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
   <button id="rClose" class="bigBtn" style="width:100%">Play again</button>
 </div></div>
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-/* =====================================================================
-   FIREBASE SETTINGS — paste your own settings here (see the setup guide)
-   Replace the word null below with the firebaseConfig { ... } block
-   that Firebase gives you. Keep the semicolon at the end.
-   ===================================================================== */
-null
-/* ===================================================================== */
-
+/* Times Table Tanks — peer-to-peer connection layer.
+   The teacher's dashboard is the hub: every pupil's device connects to it.
+   Uses the free PeerJS service only to introduce devices to each other. No accounts, no database. */
 (function(){
-  window.__off=0;window.srvNow=()=>Date.now()+window.__off;window.TT_PUPIL_LINK='';window.TT_CODE='';
+  window.__off=0;window.srvNow=()=>Date.now()+window.__off;window.TT_PUPIL_LINK='';window.TT_CODE='';window.TT_KEY='';
   const $=s=>document.querySelector(s);
   const params=new URLSearchParams(location.search);
   const wantTeacher=params.has('teacher'),wantSolo=params.has('solo');
-  const code=(params.get('c')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
-  const base=location.origin+location.pathname;
-  const cfg=FIREBASE_CONFIG;
+  let code=(params.get('c')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
+  const base=location.origin+location.pathname,PREFIX='ttt-v1-';
   const gate=$('#gate'),gMsg=$('#gMsg');
-  const show=(id)=>{gate.classList.add('show');['gPupil','gTeacher','gSetup'].forEach(x=>$('#'+x).hidden=x!==id)};
+  const show=id=>{gate.classList.add('show');['gPupil','gTeacher','gSetup'].forEach(x=>$('#'+x).hidden=x!==id)};
   const msg=(t,bad)=>{gMsg.textContent=t;gMsg.className=bad?'gbad':''};
+  const banner=t=>{const b=$('#netBanner');if(!b)return;b.textContent=t||'';b.hidden=!t};
   $('#gSolo').onclick=()=>{location.href=base+'?solo'};
-  if(wantSolo)return;                                   // practice mode: no network
-  if(!cfg||!cfg.apiKey){if(wantTeacher||code){show('gSetup')}return}
-  if(!window.firebase||!firebase.initializeApp){show('gSetup');$('#gSetupMsg').textContent='The game couldn’t load its connection files. Your school’s web filter may be blocking gstatic.com or firebaseio.com. Ask IT to allow them, or practise on your own for now.';return}
+  if(wantSolo)return;
   if(!wantTeacher&&!code){show('gPupil');msg('Type the class code your teacher gave you.');
-    $('#gCodeGo').onclick=()=>{const c=$('#gCode').value.toUpperCase().replace(/[^A-Z0-9]/g,'');if(c.length>=4)location.href=base+'?c='+c;else msg('Class codes are 6 letters and numbers.',true)};
-    $('#gCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#gCodeGo').click()});return}
+    const goCode=()=>{const c=$('#gCode').value.toUpperCase().replace(/[^A-Z0-9]/g,'');if(c.length>=4)location.href=base+'?c='+c;else msg('Class codes are 6 letters and numbers.',true)};
+    $('#gCodeGo').onclick=goCode;$('#gCode').addEventListener('keydown',e=>{if(e.key==='Enter')goCode()});return}
+  if(typeof window.Peer!=='function'){show('gSetup');$('#gSetupMsg').textContent='The game couldn’t load its connection files. Your school’s web filter may be blocking cdn.jsdelivr.net or peerjs.com. Ask IT to allow them, or practise on your own for now.';return}
 
-  firebase.initializeApp(cfg);
-  const auth=firebase.auth(),db=firebase.database();
-  db.ref('.info/serverTimeOffset').on('value',s=>{window.__off=s.val()||0});
-  let resolveReady;const ready=new Promise(r=>resolveReady=r);
-  const ctx={code:'',teacher:false,uid:null};
-  window.claude={use:name=>ready.then(()=>make(name))};
-  const authed=auth.signInAnonymously().then(c=>{ctx.uid=c.user.uid;return c.user.uid});
+  const isTeacher=wantTeacher;let resolveReady,started=false;const ready=new Promise(r=>resolveReady=r);
+  window.claude={use:n=>ready.then(()=>make(n))};
   const gen=()=>{const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s};
-  async function hashPin(c,p){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ttt|'+c+'|'+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-  function go(c,teacher,key){window.TT_KEY=key||'';ctx.code=c;ctx.teacher=teacher;window.TT_CODE=c;window.TT_PUPIL_LINK=base+'?c='+c;gate.classList.remove('show');resolveReady()}
+  function go(c){if(started)return;started=true;code=c;window.TT_CODE=c;window.TT_PUPIL_LINK=base+'?c='+c;gate.classList.remove('show');resolveReady()}
 
-  if(wantTeacher){
-    show('gTeacher');msg('Checking your saved class…');
-    const claim=async(c,pin,isNew)=>{await authed;const h=await hashPin(c,pin);
-      await db.ref('tt/'+c+'/meta').set({teacher:ctx.uid,pin:h,at:firebase.database.ServerValue.TIMESTAMP});
-      if(isNew)await db.ref('tt/'+c+'/match').set({id:'none',state:'none',mode:'timed',map:'blocks',dur:300,forts:true,handicap:false,startAt:0});
-      try{localStorage.setItem('ttt_teacher',JSON.stringify({code:c,pin}))}catch(e){}go(c,true,pin)};
-    let saved=null;try{saved=JSON.parse(localStorage.getItem('ttt_teacher')||'null')}catch(e){}
-    const ready2=()=>msg('');
-    if(saved&&saved.code&&saved.pin)claim(saved.code,saved.pin,false).catch(()=>{ready2()});else authed.then(ready2).catch(()=>msg('Couldn’t connect. Check anonymous sign-in is switched on in Firebase (see the setup guide).',true));
-    $('#gNew').onclick=async()=>{const pin=gen()+gen();msg('Setting up…');
-      for(let n=0;n<5;n++){try{await claim(gen(),pin,true);return}catch(e){if(n===4)msg('Couldn’t create the class. Check the database rules were published (see the setup guide).',true)}}};
-    $('#gOpen').onclick=async()=>{const c=$('#gCodeT').value.toUpperCase().replace(/[^A-Z0-9]/g,''),pin=$('#gPinOld').value.toUpperCase().replace(/[^A-Z0-9]/g,'');msg('Opening…');
-      try{await claim(c,pin,false)}catch(e){msg('That class code and teacher key don’t match.',true)}};
-    return}
+  /* ---------- shared state (docs + everyone's live tank data) ---------- */
+  const DEF_MATCH={id:'none',state:'none',mode:'timed',map:'blocks',dur:300,forts:true,handicap:false,tables:[2,3,4,5,10],startAt:0};
+  const docs={match:null,settings:null},docSubs={match:[],settings:[]};
+  const pres=new Map(),peerLis=[],cmdLis=[];let selfId=null,selfP={},leftQ=[],sched=false;
+  const clone=o=>o==null?null:JSON.parse(JSON.stringify(o));
+  const snap=k=>({exists:docs[k]!=null,data:()=>clone(docs[k])});
+  const emitDoc=k=>docSubs[k].forEach(f=>{try{f(snap(k))}catch(e){console.error(e)}});
+  function flush(){sched=false;const t=srvNow();const peers=[{peer:selfId||'me',sameTab:true,isMe:true,by:null,kind:'viewer',guest:false,presence:selfP,updatedAt:t}];
+    for(const[k,v]of pres){if(k===selfId)continue;peers.push({peer:k,sameTab:false,isMe:false,by:null,kind:'viewer',guest:false,presence:v,updatedAt:t})}
+    const ch={peers,joined:[],left:leftQ.splice(0),updated:[]};peerLis.forEach(f=>{try{f(ch)}catch(e){console.error(e)}})}
+  const bump=()=>{if(!sched){sched=true;setTimeout(flush,15)}};
+  function applyPatch(id,patch){if(!patch||typeof patch!=='object')return;const cur=Object.assign({},pres.get(id)||{});for(const k in patch){if(patch[k]===null)delete cur[k];else cur[k]=patch[k]}pres.set(id,cur);bump()}
+  let lastSent={};
+  function diff(p){const clean=clone(p)||{},upd={};let n=0;
+    for(const k in clean){const v=JSON.stringify(clean[k]);if(lastSent[k]!==v){upd[k]=clean[k];lastSent[k]=v;n++}}
+    for(const k in lastSent)if(!(k in clean)){upd[k]=null;delete lastSent[k];n++}return n?upd:null}
+  const safeSend=(c,m)=>{try{if(c&&c.open)c.send(m)}catch(e){}};
 
-  // pupil with a class code
-  authed.then(()=>db.ref('tt/'+code+'/match').once('value')).then(s=>{
-    if(!s.exists()){show('gPupil');msg('We couldn’t find class code '+code+'. Check it with your teacher.',true);
-      $('#gCodeGo').onclick=()=>{const c=$('#gCode').value.toUpperCase().replace(/[^A-Z0-9]/g,'');if(c.length>=4)location.href=base+'?c='+c};return}
-    go(code,false)}).catch(()=>{show('gSetup');$('#gSetupMsg').textContent='Couldn’t connect to the game. Check your internet connection, or ask your teacher.'});
+  let sendPres=()=>{},teacherSetDoc=()=>Promise.reject(new Error('not permitted')),emitCmd=()=>Promise.resolve();
 
-  /* ---------- the three things the game needs: room, db, user ---------- */
-  function make(name){const root=db.ref('tt/'+ctx.code);
-    if(name==='user')return{id:async()=>null,canEdit:async()=>ctx.teacher};
-    if(name==='db')return{doc:path=>{const ref=root.child(path.replace(/^class\//,''));return{
-      onSnapshot:(fn,err)=>{const cb=s=>fn({exists:s.exists(),data:()=>s.val()});ref.on('value',cb,e=>err&&err(e));return()=>ref.off('value',cb)},
-      set:obj=>ref.set(JSON.parse(JSON.stringify(obj)))}}};
-    if(name==='room')return makeRoom(root);return null}
-  function makeRoom(root){const pRef=root.child('p'),uid=ctx.uid,map=new Map(),lis=[];let self={},left=[],sched=false,last={},lastBeat=0,discSet=false;
-    function flush(){sched=false;const t=srvNow();const peers=[{peer:uid,sameTab:true,isMe:true,by:null,kind:'viewer',guest:false,presence:self,updatedAt:t}];
-      for(const[k,v]of map){if(k===uid||!v||typeof v!=='object')continue;if(v._hb&&t-v._hb>20000)continue;peers.push({peer:k,sameTab:false,isMe:false,by:null,kind:'viewer',guest:false,presence:v,updatedAt:t})}
-      const ch={peers,joined:[],left:left.splice(0),updated:[]};lis.forEach(f=>{try{f(ch)}catch(e){console.error(e)}})}
-    const bump=()=>{if(!sched){sched=true;setTimeout(flush,25)}};
-    pRef.on('child_added',s=>{map.set(s.key,s.val());bump()});pRef.on('child_changed',s=>{map.set(s.key,s.val());bump()});
-    pRef.on('child_removed',s=>{map.delete(s.key);left.push({peer:s.key});bump()});setInterval(bump,4000);
-    return{
-      onPeers:fn=>{lis.push(fn);bump();return()=>{}},
-      presence:async p=>{self=p;bump();const me=pRef.child(uid);if(!discSet){me.onDisconnect().remove();discSet=true}
-        const t=srvNow(),upd={};let n=0;const clean=JSON.parse(JSON.stringify(p));
-        for(const k in clean){const v=JSON.stringify(clean[k]);if(last[k]!==v){upd[k]=clean[k];last[k]=v;n++}}
-        for(const k in last)if(!(k in clean)){upd[k]=null;delete last[k];n++}
-        if(!n&&t-lastBeat<5000)return;upd._hb=t;lastBeat=t;return me.update(upd)},
-      on:(topic,fn)=>{if(topic!=='cmd')return()=>{};const ref=root.child('cmd/'+uid),t0=srvNow();let lastT=0;
-        ref.on('value',s=>{const v=s.val();if(!v||!v.t||v.t<t0-3000||v.t===lastT)return;lastT=v.t;fn({data:{to:uid,act:v.act}})});return()=>{}},
-      emit:(topic,d)=>{if(topic!=='cmd'||!d)return Promise.resolve();const to=d.to==='*'?[...map.keys()]:[d.to];
-        return Promise.all(to.map(k=>root.child('cmd/'+k).set({act:d.act,t:srvNow()})))}}}
+  /* ---------- TEACHER: the hub ---------- */
+  if(isTeacher){
+    show('gTeacher');msg('');
+    let saved=null;try{saved=localStorage.getItem('ttt_p2p_class')}catch(e){}
+    const store=c=>{try{localStorage.setItem('ttt_p2p_class',c);localStorage.setItem('ttt_p2p_docs_'+c,JSON.stringify(docs))}catch(e){}};
+    const conns=new Map();let pending={},peer=null;
+    const broadcast=m=>{for(const c of conns.values())safeSend(c,m)};
+    function open(c,fresh){msg('Opening your class…');if(peer){try{peer.destroy()}catch(e){}}
+      peer=new Peer(PREFIX+c.toLowerCase());
+      peer.on('open',id=>{selfId=id;let d=null;try{d=JSON.parse(localStorage.getItem('ttt_p2p_docs_'+c)||'null')}catch(e){}
+        docs.match=d&&d.match?d.match:{...DEF_MATCH};docs.settings=d&&d.settings?d.settings:null;store(c);go(c);emitDoc('match');emitDoc('settings');banner('')});
+      peer.on('error',e=>{const t=e&&e.type;
+        if(t==='unavailable-id'){if(fresh){open(gen(),true);return}
+          if(!started){show('gTeacher');msg('This class is already open in another tab or on another device. Close it there, or set up a new game.',true)}return}
+        if(t==='peer-unavailable')return;
+        if(!started){msg('Couldn’t reach the connection service. Check the internet connection, or your school’s web filter may be blocking peerjs.com.',true)}else banner('Connection problem. Trying again…')});
+      peer.on('disconnected',()=>{banner('Reconnecting…');setTimeout(()=>{try{peer.reconnect()}catch(e){}},1500)});
+      peer.on('connection',cn=>{
+        cn.on('open',()=>{conns.set(cn.peer,cn);banner('');safeSend(cn,{t:'init',you:cn.peer,match:docs.match,settings:docs.settings,peers:Object.fromEntries([...pres].concat(selfP&&selfP.v?[[selfId,selfP]]:[]))})});
+        cn.on('data',m=>{if(!m||typeof m!=='object')return;
+          if(m.t==='p'&&m.d&&typeof m.d==='object'){applyPatch(cn.peer,m.d);pending[cn.peer]=Object.assign(pending[cn.peer]||{},m.d)}
+          else if(m.t==='ping')safeSend(cn,{t:'pong',c:m.c,s:Date.now()})});
+        const drop=()=>{if(!conns.has(cn.peer))return;conns.delete(cn.peer);pres.delete(cn.peer);delete pending[cn.peer];leftQ.push({peer:cn.peer});bump();broadcast({t:'left',id:cn.peer})};
+        cn.on('close',drop);cn.on('error',drop)})}
+    setInterval(()=>{const keys=Object.keys(pending);if(!keys.length)return;const u=pending;pending={};
+      for(const[pid,c]of conns){const mine={};let n=0;for(const k of keys)if(k!==pid){mine[k]=u[k];n++}if(n)safeSend(c,{t:'pp',u:mine})}},80);
+    setInterval(()=>{for(const[pid,c]of conns)if(!c.open){c.emit&&c.emit('close')}},5000);
+    teacherSetDoc=(k,obj)=>{docs[k]=clone(obj);store(code);emitDoc(k);broadcast({t:'doc',k,d:docs[k]});return Promise.resolve()};
+    emitCmd=d=>{const targets=d.to==='*'?[...conns.values()]:[conns.get(d.to)].filter(Boolean);targets.forEach(c=>safeSend(c,{t:'cmd',act:d.act}));return targets.length||d.to==='*'?Promise.resolve():Promise.reject(new Error('gone'))};
+    sendPres=p=>{const d=diff(p);if(d)pending[selfId]=Object.assign(pending[selfId]||{},d)};
+    $('#gNew').onclick=()=>open(gen(),true);
+    if(saved)open(saved,false);
+  }
+
+  /* ---------- PUPIL: connects to the teacher ---------- */
+  else{
+    show('gSetup');$('#gSetup h3').textContent='Connecting to your teacher’s game…';$('#gSetupMsg').textContent='Class code '+code;
+    const peer=new Peer();let conn=null,connected=false,retry=0,waitShown=false;
+    const target=PREFIX+code.toLowerCase();
+    function connect(){if(conn){try{conn.close()}catch(e){}}conn=peer.connect(target,{reliable:true,serialization:'json'});const me=conn;
+      me.on('open',()=>{connected=true;retry=0;lastSent={};banner('');if(selfP&&selfP.v)sendPres(selfP);safeSend(me,{t:'ping',c:Date.now()})});
+      me.on('data',m=>{if(!m||typeof m!=='object')return;
+        if(m.t==='init'){pres.clear();const ps=m.peers&&typeof m.peers==='object'?m.peers:{};for(const id in ps)if(id!==selfId)pres.set(id,ps[id]);bump();
+          docs.match=m.match||{...DEF_MATCH};docs.settings=m.settings||null;go(code);emitDoc('match');emitDoc('settings')}
+        else if(m.t==='pp'&&m.u&&typeof m.u==='object'){for(const id in m.u)if(id!==selfId)applyPatch(id,m.u[id])}
+        else if(m.t==='left'){pres.delete(m.id);leftQ.push({peer:m.id});bump()}
+        else if(m.t==='doc'&&(m.k==='match'||m.k==='settings')){docs[m.k]=m.d;emitDoc(m.k)}
+        else if(m.t==='cmd')cmdLis.forEach(f=>{try{f({data:{to:selfId,act:m.act}})}catch(e){console.error(e)}});
+        else if(m.t==='pong'){const nowL=Date.now();window.__off=m.s-(m.c+nowL)/2}});
+      me.on('close',()=>{if(me!==conn)return;connected=false;if(started)banner('Lost connection to your teacher. Reconnecting…');setTimeout(connect,2000)})}
+    setInterval(()=>{if(connected)safeSend(conn,{t:'ping',c:Date.now()})},20000);
+    peer.on('open',id=>{selfId=id;connect()});
+    peer.on('error',e=>{const t=e&&e.type;
+      if(t==='peer-unavailable'){connected=false;if(!started){$('#gSetup h3').textContent='Waiting for your teacher';$('#gSetupMsg').textContent='Your teacher’s game (class '+code+') isn’t open yet. Keep this page open and it will connect by itself.'}
+        else banner('Waiting for your teacher’s game to come back…');setTimeout(connect,Math.min(8000,2000+retry++*1000));return}
+      if(!started){$('#gSetup h3').textContent='Can’t connect';$('#gSetupMsg').textContent='Couldn’t reach the connection service. Check the internet connection, or your school’s web filter may be blocking peerjs.com.'}});
+    peer.on('disconnected',()=>{setTimeout(()=>{try{peer.reconnect()}catch(e){}},1500)});
+    sendPres=p=>{const d=diff(p);if(d&&connected)safeSend(conn,{t:'p',d});else if(d&&!connected){for(const k in d)delete lastSent[k]}};
+  }
+
+  /* ---------- what the game uses ---------- */
+  function make(name){
+    if(name==='user')return{id:async()=>null,canEdit:async()=>isTeacher};
+    if(name==='db')return{doc:path=>{const k=path.replace(/^class\//,'');if(!docSubs[k])docSubs[k]=[];return{
+      onSnapshot:fn=>{docSubs[k].push(fn);setTimeout(()=>fn(snap(k)),0);return()=>{const i=docSubs[k].indexOf(fn);if(i>=0)docSubs[k].splice(i,1)}},
+      set:obj=>isTeacher?teacherSetDoc(k,obj):Promise.reject(new Error('not permitted'))}}};
+    if(name==='room')return{
+      onPeers:fn=>{peerLis.push(fn);bump();return()=>{}},
+      presence:async p=>{selfP=p;bump();sendPres(p)},
+      on:(topic,fn)=>{if(topic==='cmd')cmdLis.push(fn);return()=>{}},
+      emit:(topic,d)=>topic==='cmd'&&d&&isTeacher?emitCmd(d):Promise.resolve()};
+    return null}
 })();
 
 </script>
@@ -825,7 +855,7 @@ function update(dt){
   if(iAmHost&&live())updateBots(dt,pp.length+(me.playing?1:0));
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.92;p.vy*=.92;p.life-=dt;if(p.life<=0)particles.splice(i,1)}
   matchT-=dt;if(matchT<=0){matchT=.25;checkMatch()}
-  presT-=dt;if(presT<=0){presT=.16;sendPresence()}
+  presT-=dt;if(presT<=0){presT=.1;sendPresence()}
   boardT-=dt;if(boardT<=0){boardT=.5;updateBoard()}
   updateHud()}
 function checkMatch(){const ph=phase(),chip=$('#modeChip'),cd=$('#cd');let txt='';const watching=me.playing||teacherView;
@@ -995,8 +1025,8 @@ function renderDash(force){if(!teacherView)return;const ph=phase();
       row.append(top,stats);if(r.struggling)row.appendChild(flag);row.appendChild(acts);box.appendChild(row)})}}
 setInterval(()=>renderDash(false),800);
 $('#dLink').value=window.TT_PUPIL_LINK;$('#dCode').textContent=window.TT_CODE;
-setInterval(()=>{if($('#dLink').value!==window.TT_PUPIL_LINK){$('#dLink').value=window.TT_PUPIL_LINK;$('#dCode').textContent=window.TT_CODE;$('#dKeyNote').textContent=window.TT_KEY?'To open this class on another device: class code '+window.TT_CODE+', teacher key '+window.TT_KEY+'. Keep the key away from pupils.':''}},1000);
-$('#dSwitch').onclick=()=>{try{localStorage.removeItem('ttt_teacher')}catch(e){}location.reload()};
+setInterval(()=>{if($('#dLink').value!==window.TT_PUPIL_LINK){$('#dLink').value=window.TT_PUPIL_LINK;$('#dCode').textContent=window.TT_CODE;$('#dKeyNote').textContent='⚠ Keep this page open and your computer awake during the game. Pupils connect through it.'}},1000);
+$('#dSwitch').onclick=()=>{if(!confirm('Make a new class code? The old pupil link will stop working.'))return;try{localStorage.removeItem('ttt_p2p_class')}catch(e){}location.reload()};
 const ADJ=['Brave','Swift','Lucky','Mighty','Clever','Jolly','Sunny','Rapid','Bold','Happy','Zippy','Cosmic','Turbo','Super','Epic','Magic','Nimble','Stormy','Frosty','Fierce'];
 const ANI=['Otter','Tiger','Panda','Falcon','Badger','Fox','Koala','Eagle','Shark','Rhino','Lemur','Gecko','Moose','Llama','Hawk','Wolf','Bison','Puffin','Yak','Owl'];
 function makeName(){const taken=new Set(peersSnap.map(p=>p.presence&&p.presence.nm));let nm='';
