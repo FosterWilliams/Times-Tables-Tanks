@@ -240,9 +240,9 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     </div>
   </div>
   <aside id="dash" aria-label="Teacher dashboard">
-    <div class="dhead"><h2>Teacher dashboard</h2><button id="dTables" class="mini-btn ghost2">Tables &amp; pupils</button></div>
+    <div class="dhead"><h2>Teacher dashboard</h2></div>
     <p class="sub" id="dStatus"></p>
-    <section id="dShare" class="dsec"><h3>2. Share this link with your class</h3>
+    <section id="dShare" class="dsec"><h3>2. Share this link with your pupils</h3>
       <p class="codeBig">Class code <b id="dCode"></b></p>
       <div class="linkrow"><input id="dLink" readonly aria-label="Game link"><button id="dCopy" class="mini-btn">Copy link</button></div>
       <p class="note">Post it in your Teams channel or add it as a Website tab. Pupils type their name and land in the lobby. No accounts needed.</p></section>
@@ -254,7 +254,8 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <section id="dResultsWrap" class="dsec"><h3>Results</h3><p id="dWinner" class="win"></p><ol id="dResults" class="rlist"></ol></section>
     <div class="dbtns"><button id="dOpen" class="bigBtn">Open the lobby</button><button id="dStart" class="bigBtn">⚔ Start the battle</button><button id="dRestart" class="bigBtn">Restart: open a new lobby</button><button id="dEnd" class="bigBtn ghost">End game now</button></div>
     <div class="saveNote" id="dSave"></div>
-    <div class="row"><button id="dPupil" class="linkBtn">Try it as a pupil</button><button id="dSwitch" class="linkBtn">Switch class</button></div>
+    <p class="note" id="dKeyNote"></p>
+    <div class="row"><button id="dPupil" class="linkBtn">Try it as a pupil</button><button id="dSwitch" class="linkBtn">New class</button></div>
   </aside>
 </div>
 
@@ -266,14 +267,12 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <div class="linkrow"><input id="gCode" maxlength="8" autocomplete="off" placeholder="e.g. K7M2QX"><button id="gCodeGo" class="bigBtn">Go</button></div>
   </div>
   <div id="gTeacher" hidden>
-    <h3>Start a new class game</h3>
-    <label for="gPinNew">Choose a teacher PIN</label>
-    <div class="linkrow"><input id="gPinNew" type="password" autocomplete="new-password" placeholder="At least 4 characters"><button id="gNew" class="bigBtn">Create</button></div>
-    <p class="note">The PIN lets you open this class again later, on any device. Keep it away from pupils.</p>
-    <h3>Or open a class you made before</h3>
-    <label for="gCodeT">Class code</label><input id="gCodeT" maxlength="8" autocomplete="off">
-    <label for="gPinOld">PIN</label>
-    <div class="linkrow"><input id="gPinOld" type="password" autocomplete="current-password"><button id="gOpen" class="bigBtn">Open</button></div>
+    <button id="gNew" class="bigBtn" style="width:100%;margin-top:14px">Set up a new game</button>
+    <details style="margin-top:16px"><summary>Open my class from another device</summary>
+      <label for="gCodeT">Class code</label><input id="gCodeT" maxlength="8" autocomplete="off">
+      <label for="gPinOld">Teacher key</label>
+      <div class="linkrow"><input id="gPinOld" autocomplete="off"><button id="gOpen" class="bigBtn">Open</button></div>
+      <p class="note">Both are shown at the bottom of your dashboard.</p></details>
   </div>
   <div id="gSetup" hidden><h3>This copy isn’t connected yet</h3><p id="gSetupMsg">Add your Firebase settings to the file, as described in the setup guide.</p></div>
   <button id="gSolo" class="linkBtn">Practise on my own instead</button>
@@ -290,7 +289,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <div class="row" id="swatches"></div>
     <div id="matchInfo" hidden></div>
     <div id="soloSetup"></div>
-    <div id="tablesSec">
+    <div id="tablesSec" hidden>
       <label>Times tables to practise</label>
       <p id="assigned" hidden></p>
       <div class="row" id="tables"></div>
@@ -339,7 +338,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
    Replace the word null below with the firebaseConfig { ... } block
    that Firebase gives you. Keep the semicolon at the end.
    ===================================================================== */
-null
+const FIREBASE_CONFIG = null;
 /* ===================================================================== */
 
 (function(){
@@ -370,21 +369,21 @@ null
   const authed=auth.signInAnonymously().then(c=>{ctx.uid=c.user.uid;return c.user.uid});
   const gen=()=>{const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s};
   async function hashPin(c,p){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ttt|'+c+'|'+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-  function go(c,teacher){ctx.code=c;ctx.teacher=teacher;window.TT_CODE=c;window.TT_PUPIL_LINK=base+'?c='+c;gate.classList.remove('show');resolveReady()}
+  function go(c,teacher,key){window.TT_KEY=key||'';ctx.code=c;ctx.teacher=teacher;window.TT_CODE=c;window.TT_PUPIL_LINK=base+'?c='+c;gate.classList.remove('show');resolveReady()}
 
   if(wantTeacher){
     show('gTeacher');msg('Checking your saved class…');
     const claim=async(c,pin,isNew)=>{await authed;const h=await hashPin(c,pin);
       await db.ref('tt/'+c+'/meta').set({teacher:ctx.uid,pin:h,at:firebase.database.ServerValue.TIMESTAMP});
       if(isNew)await db.ref('tt/'+c+'/match').set({id:'none',state:'none',mode:'timed',map:'blocks',dur:300,forts:true,handicap:false,startAt:0});
-      try{localStorage.setItem('ttt_teacher',JSON.stringify({code:c,pin}))}catch(e){}go(c,true)};
+      try{localStorage.setItem('ttt_teacher',JSON.stringify({code:c,pin}))}catch(e){}go(c,true,pin)};
     let saved=null;try{saved=JSON.parse(localStorage.getItem('ttt_teacher')||'null')}catch(e){}
-    const ready2=()=>msg('Create a class game, or open one you made before.');
+    const ready2=()=>msg('');
     if(saved&&saved.code&&saved.pin)claim(saved.code,saved.pin,false).catch(()=>{ready2()});else authed.then(ready2).catch(()=>msg('Couldn’t connect. Check anonymous sign-in is switched on in Firebase (see the setup guide).',true));
-    $('#gNew').onclick=async()=>{const pin=$('#gPinNew').value.trim();if(pin.length<4){msg('Choose a PIN of at least 4 characters.',true);return}msg('Creating your class…');
+    $('#gNew').onclick=async()=>{const pin=gen()+gen();msg('Setting up…');
       for(let n=0;n<5;n++){try{await claim(gen(),pin,true);return}catch(e){if(n===4)msg('Couldn’t create the class. Check the database rules were published (see the setup guide).',true)}}};
-    $('#gOpen').onclick=async()=>{const c=$('#gCodeT').value.toUpperCase().replace(/[^A-Z0-9]/g,''),pin=$('#gPinOld').value.trim();msg('Opening…');
-      try{await claim(c,pin,false)}catch(e){msg('That class code and PIN don’t match.',true)}};
+    $('#gOpen').onclick=async()=>{const c=$('#gCodeT').value.toUpperCase().replace(/[^A-Z0-9]/g,''),pin=$('#gPinOld').value.toUpperCase().replace(/[^A-Z0-9]/g,'');msg('Opening…');
+      try{await claim(c,pin,false)}catch(e){msg('That class code and teacher key don’t match.',true)}};
     return}
 
   // pupil with a class code
@@ -514,9 +513,9 @@ let particles=[],fireCd=0,fireHeld=false,lock=null,lockT=0,lastNoAmmo=0,lastWate
 const keys=new Set(),joy={id:null,ox:0,oy:0,x:0,y:0};let mouseW=null,mouseT=0;
 // match
 const srvNow=window.srvNow||(()=>Date.now());
-const NONE={id:'none',mode:'timed',map:'blocks',handicap:false,forts:true,startAt:0,dur:300,state:'none',winner:'',reason:''};
+const NONE={id:'none',mode:'timed',map:'blocks',handicap:false,forts:true,tables:[2,3,4,5,10],startAt:0,dur:300,state:'none',winner:'',reason:''};
 let match={...NONE};
-const localMatch={mode:'timed',map:'blocks',handicap:false,forts:true,dur:300};
+const localMatch={mode:'timed',map:'blocks',handicap:false,forts:true,dur:300,tables:[2,3,4,5,10]};
 let endedId=null,myMid=null,out=false,finalRows=null;
 let entered=false,wantJoin=false,teacherView=false,teacherOptOut=false,watchPeer=null,solo=!(window.claude&&typeof window.claude.use==='function'),dbResolved=solo;
 function phase(){if(match.state==='none')return'none';if(match.state==='lobby')return'lobby';if(match.state==='ended'||endedId===match.id)return'ended';return srvNow()<match.startAt?'countdown':'running'}
@@ -541,12 +540,12 @@ function gamePeers(){return peersSnap.filter(p=>!p.sameTab&&p.presence&&p.presen
 function myKey(){return uid||('n:'+(me.name||$('#name').value||'').toLowerCase().trim())}
 function cleanTables(a){return Array.isArray(a)?[...new Set(a.map(Number).filter(n=>Number.isInteger(n)&&n>=2&&n<=12))]:[]}
 function myAssign(){const p=settings&&settings.pupils&&typeof settings.pupils==='object'?settings.pupils[myKey()]:null;return p&&typeof p==='object'?p:null}
-function effectiveTables(){const a=myAssign(),t=cleanTables(a&&a.tables);if(t.length)return t;const d=cleanTables(settings&&settings.defaultTables);if(d.length&&settings.lock)return d;return null}
+function effectiveTables(){const a=myAssign(),t=cleanTables(a&&a.tables);if(t.length)return t;return cleanTables(match.tables).length?cleanTables(match.tables):[2,3,4,5,10]}
 const fortsOpen=()=>match.forts!==false;
-const pickSettings=m=>({mode:m.mode,map:m.map,handicap:!!m.handicap,forts:m.forts!==false,dur:m.dur});
+const pickSettings=m=>({mode:m.mode,map:m.map,handicap:!!m.handicap,forts:m.forts!==false,dur:m.dur,tables:cleanTables(m.tables).length?cleanTables(m.tables):[2,3,4,5,10]});
 const newId=()=>'g'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);
 function sanitizeMatch(d){if(!d||typeof d!=='object')return{...NONE};
-  return{id:String(d.id||'none').slice(0,40),mode:MODES[d.mode]?d.mode:'timed',map:MAPS[d.map]?d.map:'blocks',handicap:!!d.handicap,forts:d.forts!==false,startAt:num(d.startAt),dur:clamp(num(d.dur)||300,60,1800),
+  return{id:String(d.id||'none').slice(0,40),mode:MODES[d.mode]?d.mode:'timed',map:MAPS[d.map]?d.map:'blocks',handicap:!!d.handicap,forts:d.forts!==false,tables:cleanTables(d.tables).length?cleanTables(d.tables):[2,3,4,5,10],startAt:num(d.startAt),dur:clamp(num(d.dur)||300,60,1800),
     state:['none','lobby','running','ended'].includes(d.state)?d.state:'none',winner:String(d.winner||'').slice(0,80),reason:String(d.reason||'').slice(0,120)}}
 function onMatch(raw){const prev=match;match=sanitizeMatch(raw);
   if(buildMap(match.map)){bots=[];botBullets=[];rbots.length=0;bullets=[];botsFor=null;
@@ -621,11 +620,14 @@ function setupForm(el,m,onChange){el.replaceChildren();
   const md=document.createElement('p');md.className='note';md.textContent={free:'Drop in any time, no clock. Knocked-out tanks rebuild.',timed:'Battle for points against the clock. Knocked-out tanks come back in a quieter part of the map.',deathmatch:'One life each. Once your tank is knocked out, you’re out. Last tank standing wins.'}[m.mode];el.appendChild(md);
   if(m.mode==='timed'){r=sec('Length');[3,5,8,10].forEach(n=>opt(r,n+' min',m.dur===n*60,()=>m.dur=n*60))}
   r=sec('Questions');opt(r,'Scratch',!m.handicap,()=>m.handicap=false);opt(r,'Handicap',!!m.handicap,()=>m.handicap=true);
-  const hn=document.createElement('p');hn.className='note';hn.textContent=m.handicap?'Quick, accurate answerers move up to harder tables. Anyone finding it tough moves down to easier ones.':'Everyone answers their own chosen or assigned tables.';el.appendChild(hn);
+  const hn=document.createElement('p');hn.className='note';hn.textContent=m.handicap?'Quick, accurate answerers move up to harder tables. Anyone finding it tough moves down to easier ones.':'Everyone answers the times tables you pick below.';el.appendChild(hn);
+  if(!m.handicap){if(!Array.isArray(m.tables)||!m.tables.length)m.tables=[2,3,4,5,10];r=sec('Times tables to practise');
+    for(let n=2;n<=12;n++)opt(r,String(n),m.tables.includes(n),()=>{const i=m.tables.indexOf(n);if(i>=0){if(m.tables.length>1)m.tables.splice(i,1)}else m.tables.push(n);m.tables.sort((a,b)=>a-b)});
+    opt(r,'All',m.tables.length===11,()=>{m.tables=[2,3,4,5,6,7,8,9,10,11,12]})}
   r=sec('Forts');opt(r,'🏰 On',m.forts!==false,()=>m.forts=true);opt(r,'Off',m.forts===false,()=>m.forts=false)}
-function matchSummary(m){const bits=[MAPS[m.map].e+' '+MAPS[m.map].n,MODES[m.mode]+(m.mode==='timed'?' ('+Math.round(m.dur/60)+' min)':''),m.handicap?'Handicap':'Scratch','Forts '+(m.forts!==false?'on':'off')];return bits.join(' · ')}
+function matchSummary(m){const bits=[MAPS[m.map].e+' '+MAPS[m.map].n,MODES[m.mode]+(m.mode==='timed'?' ('+Math.round(m.dur/60)+' min)':''),m.handicap?'Handicap':'Tables: '+(cleanTables(m.tables).join(', ')||'2, 3, 4, 5, 10'),'Forts '+(m.forts!==false?'on':'off')];return bits.join(' · ')}
 function refreshStart(){$('#soloSetup').hidden=!solo;if(solo&&!$('#soloSetup').childElementCount)setupForm($('#soloSetup'),localMatch);
-  const mi=$('#matchInfo');mi.hidden=solo;$('#go').textContent=solo?'Start':(entered?'Back to battle':'Join the game');
+  const mi=$('#matchInfo');mi.hidden=solo;$('#go').textContent=solo?'Start':(entered?'Back to the game':'Join the lobby');
   if(!solo){mi.replaceChildren();const b=document.createElement('b');const ph=phase();
     b.textContent=ph==='none'?'No game open yet':ph==='lobby'?'Your teacher’s game is open':ph==='ended'?'Last game has finished':'A game is running';mi.append(b,ph==='none'?'You can join now and wait for your teacher.':matchSummary(match))}}
 
@@ -942,7 +944,7 @@ function renderTeacher(){if(!draft)return;
     else{const t=document.createElement('span');t.className='st';t.textContent='Whole-class tables ';const b=document.createElement('button');b.className='linkBtn';b.textContent='Set tables for this pupil';b.onclick=()=>{ensure().tables=[...draft.defaultTables];saveDraft();renderTeacher()};cr.append(t,b)}
     row.appendChild(cr);if(!o){const del=document.createElement('button');del.className='linkBtn';del.textContent='Forget';del.onclick=()=>{delete draft.pupils[k];saveDraft();renderTeacher()};row.appendChild(del)}
     list.appendChild(row)})}
-$('#dTables').onclick=openTeacher;$('#tClose').onclick=()=>{$('#teacher').classList.remove('show')};
+$('#tClose').onclick=()=>{$('#teacher').classList.remove('show')};
 
 /* ================= TEACHER DASHBOARD ================= */
 let dMatch=null,dashPhase='',dashSig='',writing=false;
@@ -967,7 +969,7 @@ function renderDash(force){if(!teacherView)return;const ph=phase();
     $('#dSetupTitle').textContent=ph==='lobby'?'Game settings (you can still change them)':ph==='ended'?'Settings for the next game':'1. Set up the game';
     $('#dOpen').hidden=ph!=='none';$('#dStart').hidden=ph!=='lobby';$('#dEnd').hidden=!(ph==='running'||ph==='countdown');$('#dRestart').hidden=ph!=='ended';
     $('#dShare').hidden=ph==='none';$('#dLobbyWrap').hidden=ph!=='lobby';$('#dLiveWrap').hidden=!(ph==='running'||ph==='countdown');$('#dResultsWrap').hidden=ph!=='ended';
-    $('#dStatus').textContent={none:'No game open. Set it up, then open the lobby.',lobby:'Lobby open · '+matchSummary(match),countdown:'Starting… · '+matchSummary(match),running:'Battle on · '+matchSummary(match),ended:'Game finished'}[ph];
+    $('#dStatus').textContent={none:'Choose your settings, then open the lobby to get the link for your pupils.',lobby:'Lobby open · '+matchSummary(match),countdown:'Starting… · '+matchSummary(match),running:'Battle on · '+matchSummary(match),ended:'Game finished'}[ph];
     if(ph==='ended'){const ol=$('#dResults');ol.replaceChildren();$('#dWinner').textContent=match.winner||'';(finalRows||[]).forEach(r=>{const li=document.createElement('li');const d=document.createElement('span');d.className='dot';d.style.background=r.col;const n=document.createElement('span');n.className='n';n.textContent=r.nm;const b=document.createElement('b');b.textContent=r.s+' pts';li.append(d,n,b);ol.appendChild(li)});
       if(!(finalRows||[]).length){const li=document.createElement('li');li.textContent='Results appear here when a game ends while this page is open.';ol.appendChild(li)}}}
   if(ph==='lobby'){const gp=gamePeers();const sig='L'+gp.map(p=>p.peer+p.presence.nm).join();if(sig!==dashSig){dashSig=sig;const l=$('#dLobby');l.replaceChildren();
@@ -993,7 +995,7 @@ function renderDash(force){if(!teacherView)return;const ph=phase();
       row.append(top,stats);if(r.struggling)row.appendChild(flag);row.appendChild(acts);box.appendChild(row)})}}
 setInterval(()=>renderDash(false),800);
 $('#dLink').value=window.TT_PUPIL_LINK;$('#dCode').textContent=window.TT_CODE;
-setInterval(()=>{if($('#dLink').value!==window.TT_PUPIL_LINK){$('#dLink').value=window.TT_PUPIL_LINK;$('#dCode').textContent=window.TT_CODE}},1000);
+setInterval(()=>{if($('#dLink').value!==window.TT_PUPIL_LINK){$('#dLink').value=window.TT_PUPIL_LINK;$('#dCode').textContent=window.TT_CODE;$('#dKeyNote').textContent=window.TT_KEY?'To open this class on another device: class code '+window.TT_CODE+', teacher key '+window.TT_KEY+'. Keep the key away from pupils.':''}},1000);
 $('#dSwitch').onclick=()=>{try{localStorage.removeItem('ttt_teacher')}catch(e){}location.reload()};
 const ADJ=['Brave','Swift','Lucky','Mighty','Clever','Jolly','Sunny','Rapid','Bold','Happy','Zippy','Cosmic','Turbo','Super','Epic','Magic','Nimble','Stormy','Frosty','Fierce'];
 const ANI=['Otter','Tiger','Panda','Falcon','Badger','Fox','Koala','Eagle','Shark','Rhino','Lemur','Gecko','Moose','Llama','Hawk','Wolf','Bison','Puffin','Yak','Owl'];
