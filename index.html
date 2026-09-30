@@ -177,6 +177,11 @@ button{font:inherit;color:inherit;cursor:pointer}
 .wcard{background:var(--panel);border:2px solid var(--line);border-radius:20px;padding:18px 20px;max-width:380px;text-align:center}
 .wcard h2{margin:0 0 6px;font-size:24px}.wcard p{margin:0 0 10px;color:var(--muted)}
 #wList{justify-content:center;margin-bottom:6px}
+.teamBtn{flex:1;min-height:48px;border-radius:12px;border:3px solid transparent;font-weight:700;font-size:16px;color:#fff}
+.teamBtn.blue{background:#2D6BE0}.teamBtn.pink{background:#D93A8F}
+.teamBtn[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 3px var(--panel) inset}
+.teamBtn:disabled{opacity:.4}
+#wTeams{margin-bottom:10px}
 .namechip{padding:4px 10px;border-radius:999px;border:2px solid var(--line);background:var(--key);font-weight:600;font-size:14px}
 #dash{display:none;flex:none;background:var(--panel);border-top:2px solid var(--line);padding:14px;overflow:auto;max-height:58%;flex-direction:column;gap:4px}
 body.teacherView #dash{display:flex}
@@ -225,7 +230,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <div id="board"><h3 id="boardTitle">Leaderboard</h3><ol id="boardList"></ol></div>
     <div id="toast"></div>
     <div id="cd"></div>
-    <div id="wait"><div class="wcard"><h2 id="wTitle">Waiting…</h2><p id="wMsg"></p><div id="wList" class="row"></div><button id="wJoin" class="bigBtn" hidden>Play again</button></div></div>
+    <div id="wait"><div class="wcard"><h2 id="wTitle">Waiting…</h2><p id="wMsg"></p><div id="wTeams" class="row" hidden></div><div id="wList" class="row"></div><button id="wJoin" class="bigBtn" hidden>Play again</button></div></div>
     <div id="down"><div><strong id="downTitle">Tank knocked out!</strong><span id="downMsg">Answer 3 questions to rebuild</span><div id="pips">○○○</div></div></div>
     <button id="fortBtn">🏰 Go to a fort</button>
     <div id="fortInfo"></div>
@@ -301,7 +306,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
     <button class="teachLink" id="openTeacher">🍎 Back to teacher dashboard</button>
     <div id="lobby"></div>
     <ul class="how">
-      <li>✅ Right answer: +3 shells and a repair (+5 if you answer in under 4 seconds)</li>
+      <li>✅ Right answers load shells and repair your tank. Quick answers (under 4 seconds) load more</li>
       <li>🔥 5 in a row: bonus shells</li>
       <li>🎯 Your turret locks on to the nearest tank by itself, so just move and fire</li>
       <li>🤖 Grey tanks are bots. Coloured tanks are your classmates</li>
@@ -408,7 +413,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
       for(const[pid,c]of conns){const mine={};let n=0;for(const k of keys)if(k!==pid){mine[k]=u[k];n++}if(n)safeSend(c,{t:'pp',u:mine})}},80);
     setInterval(()=>{for(const[pid,c]of conns)if(!c.open){c.emit&&c.emit('close')}},5000);
     teacherSetDoc=(k,obj)=>{docs[k]=clone(obj);store(code);emitDoc(k);broadcast({t:'doc',k,d:docs[k]});return Promise.resolve()};
-    emitCmd=d=>{const targets=d.to==='*'?[...conns.values()]:[conns.get(d.to)].filter(Boolean);targets.forEach(c=>safeSend(c,{t:'cmd',act:d.act}));return targets.length||d.to==='*'?Promise.resolve():Promise.reject(new Error('gone'))};
+    emitCmd=d=>{const targets=d.to==='*'?[...conns.values()]:[conns.get(d.to)].filter(Boolean);targets.forEach(c=>safeSend(c,{t:'cmd',act:d.act,tm:d.tm}));return targets.length||d.to==='*'?Promise.resolve():Promise.reject(new Error('gone'))};
     sendPres=p=>{const d=diff(p);if(d)pending[selfId]=Object.assign(pending[selfId]||{},d)};
     $('#gNew').onclick=()=>open(gen(),true);
     if(saved)open(saved,false);
@@ -427,7 +432,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
         else if(m.t==='pp'&&m.u&&typeof m.u==='object'){for(const id in m.u)if(id!==selfId)applyPatch(id,m.u[id])}
         else if(m.t==='left'){pres.delete(m.id);leftQ.push({peer:m.id});bump()}
         else if(m.t==='doc'&&(m.k==='match'||m.k==='settings')){docs[m.k]=m.d;emitDoc(m.k)}
-        else if(m.t==='cmd')cmdLis.forEach(f=>{try{f({data:{to:selfId,act:m.act}})}catch(e){console.error(e)}});
+        else if(m.t==='cmd')cmdLis.forEach(f=>{try{f({data:{to:selfId,act:m.act,tm:m.tm}})}catch(e){console.error(e)}});
         else if(m.t==='pong'){const nowL=Date.now();window.__off=m.s-(m.c+nowL)/2}});
       me.on('close',()=>{if(me!==conn)return;connected=false;if(started)banner('Lost connection to your teacher. Reconnecting…');setTimeout(connect,2000)})}
     setInterval(()=>{if(connected)safeSend(conn,{t:'ping',c:Date.now()})},20000);
@@ -459,7 +464,7 @@ body.teacherView #maths,body.teacherView #fire,body.teacherView #hint,body.teach
 (()=>{
 const $=s=>document.querySelector(s);
 const stage=$('#stage'), cv=$('#c'), ctx=cv.getContext('2d');
-const W=2000,H=1400,R=22,SPEED=200,BOT_SPEED=105,BSPEED=620,PI2=Math.PI*2,FORT_R=92;
+const W=2800,H=2000,R=22,SPEED=200,BOT_SPEED=105,BSPEED=620,PI2=Math.PI*2,FORT_R=92;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const wrap=d=>{while(d>Math.PI)d-=PI2;while(d<-Math.PI)d+=PI2;return d};
 const toward=(a,b,m)=>{const d=wrap(b-a);return Math.abs(d)<=m?b:a+Math.sign(d)*m};
@@ -479,14 +484,14 @@ const rectDist=(px,py,o)=>Math.hypot(px-clamp(px,o.x,o.x+o.w),py-clamp(py,o.y,o.
 const blockCols=['#F4B942','#6CC3A0','#F2879B','#7EA7F2'];
 function buildMap(name){
   if(!MAPS[name])name='blocks';if(name===MAP)return false;MAP=name;rects=[];trees=[];lakes=[];
-  FORTS=name==='maze'?[{x:1100,y:700},{x:300,y:1100},{x:1700,y:300}]:[{x:1000,y:700},{x:300,y:1150},{x:1720,y:250}];
+  FORTS=name==='maze'?[{x:1500,y:1100},{x:300,y:1700},{x:2500,y:300}]:[{x:1400,y:1000},{x:420,y:1640},{x:2400,y:360}];
   const fortClear=(x,y,rad)=>FORTS.every(f=>Math.hypot(f.x-x,f.y-y)>FORT_R+rad);
   if(name==='blocks'){const r=mulberry(12);let tries=0;
-    while(rects.length<22&&tries<900){tries++;const w=70+r()*130,h=70+r()*130,x=140+r()*(W-280-w),y=110+r()*(H-220-h);const o={x,y,w,h};
+    while(rects.length<40&&tries<1800){tries++;const w=70+r()*130,h=70+r()*130,x=140+r()*(W-280-w),y=110+r()*(H-220-h);const o={x,y,w,h};
       if(rects.some(p=>x<p.x+p.w+80&&x+w+80>p.x&&y<p.y+p.h+80&&y+h+80>p.y))continue;
       if(FORTS.some(f=>rectDist(f.x,f.y,o)<FORT_R+80))continue;
       o.c=Math.floor(r()*4);o.t=(2+Math.floor(r()*11))+'×'+(2+Math.floor(r()*11));rects.push(o)}}
-  else if(name==='maze'){const r=mulberry(99),C=10,RW=7,S=200,vis=new Uint8Array(C*RW),right=new Uint8Array(C*RW).fill(1),down=new Uint8Array(C*RW).fill(1),st=[0];vis[0]=1;
+  else if(name==='maze'){const r=mulberry(99),C=14,RW=10,S=200,vis=new Uint8Array(C*RW),right=new Uint8Array(C*RW).fill(1),down=new Uint8Array(C*RW).fill(1),st=[0];vis[0]=1;
     while(st.length){const c=st[st.length-1],i=c%C,j=(c/C)|0,nb=[];
       if(i>0&&!vis[c-1])nb.push(c-1);if(i<C-1&&!vis[c+1])nb.push(c+1);if(j>0&&!vis[c-C])nb.push(c-C);if(j<RW-1&&!vis[c+C])nb.push(c+C);
       if(!nb.length){st.pop();continue}const n=nb[Math.floor(r()*nb.length)];
@@ -495,16 +500,16 @@ function buildMap(name){
       if(i<C-1&&right[c]&&r()>.12){rects.push({x:S*(i+1)-12,y:S*j-12,w:24,h:S/2+12});rects.push({x:S*(i+1)-12,y:S*j+S/2-12,w:24,h:S/2+24})}
       if(j<RW-1&&down[c]&&r()>.12){rects.push({x:S*i-12,y:S*(j+1)-12,w:S/2+12,h:24});rects.push({x:S*i+S/2-12,y:S*(j+1)-12,w:S/2+24,h:24})}}}
   else if(name==='lakes'){const r=mulberry(31);let g=0,tries=0;
-    while(g<6&&tries<3000){tries++;const base=65+r()*55,cx=240+r()*(W-480),cy=200+r()*(H-400),cs=[{x:cx,y:cy,r:base}],extra=1+Math.floor(r()*2);
+    while(g<10&&tries<6000){tries++;const base=65+r()*55,cx=240+r()*(W-480),cy=200+r()*(H-400),cs=[{x:cx,y:cy,r:base}],extra=1+Math.floor(r()*2);
       for(let k=0;k<extra;k++){const a=r()*PI2,d=base*(.55+r()*.35);cs.push({x:cx+Math.cos(a)*d,y:cy+Math.sin(a)*d,r:base*(.55+r()*.35)})}
       if(cs.some(c=>c.x-c.r<130||c.x+c.r>W-60||c.y-c.r<60||c.y+c.r>H-60))continue;
       if(cs.some(c=>!fortClear(c.x,c.y,c.r+110)))continue;
       if(cs.some(c=>lakes.some(l=>Math.hypot(l.x-c.x,l.y-c.y)<l.r+c.r+140)))continue;
       cs.forEach(c=>lakes.push(c));g++}
-    tries=0;while(rects.length<9&&tries<900){tries++;const w=46+r()*50,h=46+r()*50,x=140+r()*(W-280-w),y=90+r()*(H-180-h),o={x,y,w,h,rock:1};
+    tries=0;while(rects.length<16&&tries<1800){tries++;const w=46+r()*50,h=46+r()*50,x=140+r()*(W-280-w),y=90+r()*(H-180-h),o={x,y,w,h,rock:1};
       if(lakes.some(l=>rectDist(l.x,l.y,o)<l.r+90))continue;if(rects.some(p=>rectDist(p.x+p.w/2,p.y+p.h/2,o)<160))continue;if(FORTS.some(f=>rectDist(f.x,f.y,o)<FORT_R+80))continue;rects.push(o)}}
   else{const r=mulberry(57);let tries=0;
-    while(trees.length<130&&tries<8000){tries++;const t={x:130+r()*(W-190),y:60+r()*(H-120),r:16+r()*14,s:r()};
+    while(trees.length<260&&tries<16000){tries++;const t={x:130+r()*(W-190),y:60+r()*(H-120),r:16+r()*14,s:r()};
       if(trees.some(o=>Math.hypot(o.x-t.x,o.y-t.y)<o.r+t.r+62))continue;if(!fortClear(t.x,t.y,t.r+45))continue;trees.push(t)}}
   rects=rects.filter(o=>FORTS.every(f=>rectDist(f.x,f.y,o)>FORT_R+45));
   trees=trees.filter(t=>fortClear(t.x,t.y,t.r+45));
@@ -538,6 +543,8 @@ function freeSpot(){const others=allTanks().filter(t=>t!==me);let best=null,best
   return best||{x:W/2,y:H/2}}
 
 /* ================= STATE ================= */
+const TEAMS={blue:{n:'Blue',c:'#2D6BE0'},pink:{n:'Pink',c:'#D93A8F'}};
+const MATHS={less:{s:5,f:8,h:15,hf:20,b:6,start:8},mid:{s:3,f:5,h:10,hf:15,b:5,start:5},more:{s:1,f:2,h:5,hf:8,b:2,start:3}};
 const COLORS=['#2D6BE0','#E0492D','#1FA36B','#9B4DE0','#E08A00','#D93A8F'];
 const me={x:W/2,y:H/2,a:0,ta:0,hp:100,ammo:5,kills:0,correct:0,ans:0,tsum:0,forced:false,dead:false,deaths:0,name:'',color:COLORS[0],playing:false,respawnT:0,rebuild:0,fort:-1,fortT:0,fortCd:0};
 let bullets=[],bulletSeq=0,dmgOut=[],koOut=[],koSeq=0,hitSeq=0;
@@ -548,9 +555,9 @@ let particles=[],fireCd=0,fireHeld=false,lock=null,lockT=0,lastNoAmmo=0,lastWate
 const keys=new Set(),joy={id:null,ox:0,oy:0,x:0,y:0};let mouseW=null,mouseT=0;
 // match
 const srvNow=window.srvNow||(()=>Date.now());
-const NONE={id:'none',mode:'timed',map:'blocks',handicap:false,forts:true,tables:[2,3,4,5,10],startAt:0,dur:300,state:'none',winner:'',reason:''};
+const NONE={id:'none',mode:'timed',map:'blocks',handicap:false,forts:true,teams:false,maths:'mid',tables:[2,3,4,5,10],startAt:0,dur:300,state:'none',winner:'',reason:''};
 let match={...NONE};
-const localMatch={mode:'timed',map:'blocks',handicap:false,forts:true,dur:300,tables:[2,3,4,5,10]};
+const localMatch={mode:'timed',map:'blocks',handicap:false,forts:true,teams:false,maths:'mid',dur:300,tables:[2,3,4,5,10]};
 let endedId=null,myMid=null,out=false,finalRows=null;
 let entered=false,wantJoin=false,teacherView=false,teacherOptOut=false,watchPeer=null,solo=!(window.claude&&typeof window.claude.use==='function'),dbResolved=solo;
 function phase(){if(match.state==='none')return'none';if(match.state==='lobby')return'lobby';if(match.state==='ended'||endedId===match.id)return'ended';return srvNow()<match.startAt?'countdown':'running'}
@@ -563,7 +570,7 @@ let dbCap=null,isTeacher=false,settings=null,settingsRef=null,matchRef=null,uid=
 if(!solo){
   window.claude.use('room').then(r=>{if(!r)return;room=r;
     r.onPeers(ch=>{peersSnap=ch.peers;for(const p of ch.peers)if(p.sameTab)myPeer=p.peer;for(const p of ch.left){rs.delete(p.peer);lastPres.delete(p.peer)}},()=>{room=null;peersSnap=[]});
-    r.on('cmd',m=>{const d=m&&m.data;if(!d||typeof d!=='object'||teacherView)return;if(d.to!=='*'&&(!myPeer||d.to!==myPeer))return;if(d.act==='fort')forceFort();else if(d.act==='release')releaseFort()})}).catch(()=>{});
+    r.on('cmd',m=>{const d=m&&m.data;if(!d||typeof d!=='object'||teacherView)return;if(d.to!=='*'&&(!myPeer||d.to!==myPeer))return;if(d.act==='fort')forceFort();else if(d.act==='release')releaseFort();else if(d.act==='team'&&TEAMS[d.tm]&&teamOn()){me.team=d.tm;applyTeamColor();fillWaitList();toast('🍎 Your teacher put you on the '+TEAMS[d.tm].n+' team')}})}).catch(()=>{});
   window.claude.use('user').then(async u=>{if(!u)return;try{uid=await u.id()}catch(e){}try{isTeacher=!!(await u.canEdit())}catch(e){}if(isTeacher)document.body.classList.add('isTeacher');setupRole()}).catch(()=>{});
   window.claude.use('db').then(d=>{dbResolved=true;if(!d){solo=true;refreshStart();if(entered&&!me.playing)localGame();return}dbCap=d;settingsRef=d.doc('class/settings');matchRef=d.doc('class/match');setupRole();
     settingsRef.onSnapshot(s=>{settings=s.exists?(s.data()||null):null;applySettings()},()=>{});
@@ -577,10 +584,10 @@ function cleanTables(a){return Array.isArray(a)?[...new Set(a.map(Number).filter
 function myAssign(){const p=settings&&settings.pupils&&typeof settings.pupils==='object'?settings.pupils[myKey()]:null;return p&&typeof p==='object'?p:null}
 function effectiveTables(){const a=myAssign(),t=cleanTables(a&&a.tables);if(t.length)return t;return cleanTables(match.tables).length?cleanTables(match.tables):[2,3,4,5,10]}
 const fortsOpen=()=>match.forts!==false;
-const pickSettings=m=>({mode:m.mode,map:m.map,handicap:!!m.handicap,forts:m.forts!==false,dur:m.dur,tables:cleanTables(m.tables).length?cleanTables(m.tables):[2,3,4,5,10]});
+const pickSettings=m=>({mode:m.mode,map:m.map,handicap:!!m.handicap,forts:m.forts!==false,teams:!!m.teams,maths:MATHS[m.maths]?m.maths:'mid',dur:m.dur,tables:cleanTables(m.tables).length?cleanTables(m.tables):[2,3,4,5,10]});
 const newId=()=>'g'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);
 function sanitizeMatch(d){if(!d||typeof d!=='object')return{...NONE};
-  return{id:String(d.id||'none').slice(0,40),mode:MODES[d.mode]?d.mode:'timed',map:MAPS[d.map]?d.map:'blocks',handicap:!!d.handicap,forts:d.forts!==false,tables:cleanTables(d.tables).length?cleanTables(d.tables):[2,3,4,5,10],startAt:num(d.startAt),dur:clamp(num(d.dur)||300,60,1800),
+  return{id:String(d.id||'none').slice(0,40),mode:MODES[d.mode]?d.mode:'timed',map:MAPS[d.map]?d.map:'blocks',handicap:!!d.handicap,forts:d.forts!==false,teams:!!d.teams,maths:MATHS[d.maths]?d.maths:'mid',tables:cleanTables(d.tables).length?cleanTables(d.tables):[2,3,4,5,10],startAt:num(d.startAt),dur:clamp(num(d.dur)||300,60,1800),
     state:['none','lobby','running','ended'].includes(d.state)?d.state:'none',winner:String(d.winner||'').slice(0,80),reason:String(d.reason||'').slice(0,120)}}
 function onMatch(raw){const prev=match;match=sanitizeMatch(raw);
   if(buildMap(match.map)){bots=[];botBullets=[];rbots.length=0;bullets=[];botsFor=null;
@@ -589,20 +596,32 @@ function onMatch(raw){const prev=match;match=sanitizeMatch(raw);
   if(match.state==='ended'&&endedId!==match.id){if((myMid===match.id&&me.playing)||(teacherView&&prev.id===match.id&&prev.state!=='ended'))endMatch(match.reason||'Your teacher ended the game.',match.winner);else endedId=match.id}
   if(prev.handicap!==match.handicap&&q&&me.playing){toast(match.handicap?'⭐ Handicap game: questions match how you’re doing':'Scratch game: everyone on their own tables');newQ()}
   if(!fortsOpen()&&me.fort>=0&&!me.forced)leaveFort('The forts are closed');
+  if(prev.teams!==match.teams){if(!match.teams)me.team='';applyTeamColor()}
   refreshStart();applySettings();syncPupil();renderDash(true);if($('#teacher').classList.contains('show'))renderTeacher()}
-function resetForGame(){myMid=match.id;out=false;streak=0;finalRows=null;
-  Object.assign(me,{kills:0,correct:0,deaths:0,ans:0,tsum:0,hp:100,ammo:5,dead:false,fort:-1,fortCd:0,forced:false});$('#streak').textContent=''}
-function spawnIntoArena(){me.playing=true;const s=freeSpot();me.x=s.x;me.y=s.y;camFX=me.x;camFY=me.y;hideWait();$('#down').classList.remove('show');$('#results').classList.remove('show');
+let teamAt=0;const teamOn=()=>!!match.teams&&!solo;
+function applyTeamColor(){if(!me.baseColor)me.baseColor=me.color;me.color=teamOn()&&TEAMS[me.team]?TEAMS[me.team].c:me.baseColor}
+function teamCounts(excludeMe){const c={blue:0,pink:0};for(const p of gamePeers()){const t=p.presence.tm;if(TEAMS[t])c[t]++}if(!excludeMe&&TEAMS[me.team]&&myMid===match.id)c[me.team]++;return c}
+function canPick(t){const c=teamCounts(true),o=t==='blue'?'pink':'blue';return me.team===t||c[t]<=c[o]}
+function pickTeam(t){if(!teamOn()||!TEAMS[t]||!canPick(t))return;me.team=t;applyTeamColor();fillWaitList()}
+function autoTeam(){if(!teamOn()){if(me.team){me.team='';applyTeamColor()}return}if(TEAMS[me.team])return;const c=teamCounts(true);pickTeam(c.blue<c.pink?'blue':c.pink<c.blue?'pink':(Math.random()<.5?'blue':'pink'))}
+function resetForGame(){teamAt=0;myMid=match.id;out=false;streak=0;finalRows=null;
+  Object.assign(me,{kills:0,correct:0,deaths:0,ans:0,tsum:0,hp:100,ammo:(MATHS[match.maths]||MATHS.mid).start,dead:false,fort:-1,fortCd:0,forced:false,team:''});applyTeamColor();$('#streak').textContent=''}
+function spawnIntoArena(){autoTeam();me.playing=true;const s=freeSpot();me.x=s.x;me.y=s.y;camFX=me.x;camFY=me.y;hideWait();$('#down').classList.remove('show');$('#results').classList.remove('show');
   toast((match.mode==='timed'?'⏱ Timed battle':match.mode==='deathmatch'?'🛡 Last tank standing':'Free play')+' on '+MAPS[match.map].n+'!');if(!q)newQ()}
 function localGame(){onMatch({...localMatch,id:'L'+Date.now().toString(36),startAt:srvNow()+3500,state:'running'});resetForGame();spawnIntoArena();applySettings()}
 function showWait(t,m,withList,withJoin){$('#wTitle').textContent=t;$('#wMsg').textContent=m;$('#wList').hidden=!withList;$('#wJoin').hidden=!withJoin;$('#wait').classList.add('show');if(withList)fillWaitList()}
 function hideWait(){$('#wait').classList.remove('show')}
-function fillWaitList(){const l=$('#wList');l.replaceChildren();const names=[me.name+' (you)',...gamePeers().map(p=>String(p.presence.nm||'Pupil').slice(0,16))];
-  names.forEach(n=>{const c=document.createElement('span');c.className='namechip';c.textContent=n;l.appendChild(c)})}
+function fillWaitList(){const l=$('#wList');l.replaceChildren();const tp=$('#wTeams');
+  const list=[{n:me.name+' (you)',t:me.team},...gamePeers().map(p=>({n:String(p.presence.nm||'Pupil').slice(0,16),t:p.presence.tm}))];
+  list.forEach(x=>{const c=document.createElement('span');c.className='namechip';c.textContent=x.n;if(teamOn()&&TEAMS[x.t]){c.style.borderColor=TEAMS[x.t].c;c.style.color=TEAMS[x.t].c}l.appendChild(c)});
+  tp.hidden=!(teamOn()&&myMid===match.id&&phase()==='lobby');if(tp.hidden)return;tp.replaceChildren();const cnt=teamCounts(false);
+  for(const t of['blue','pink']){const b=document.createElement('button');b.type='button';b.className='teamBtn '+t;b.setAttribute('aria-pressed',me.team===t);
+    b.textContent=(me.team===t?'✓ ':'')+TEAMS[t].n+' team ('+cnt[t]+')';b.disabled=!canPick(t);b.onclick=()=>pickTeam(t);tp.appendChild(b)}
+  const n=document.createElement('p');n.className='note';n.style.width='100%';n.textContent='Teams must stay even, so you can only switch to the smaller team.';tp.appendChild(n)}
 function syncPupil(){if(teacherView||solo||!entered)return;const ph=phase(),resOpen=$('#results').classList.contains('show');
   if(ph==='none'){me.playing=false;showWait('Waiting for your teacher','Your teacher hasn’t opened the game yet. It will appear here by itself. Warm up with some questions below!');return}
   if(ph==='lobby'){me.playing=false;if(wantJoin&&myMid!==match.id)resetForGame();
-    if(myMid===match.id){$('#results').classList.remove('show');showWait('You’re in! 🎉','Waiting for your teacher to start the battle. Warm up below. Warm-up answers don’t count.',true)}
+    if(myMid===match.id){if(!teamAt)teamAt=now()+700+Math.random()*1600;if(now()>teamAt)autoTeam();$('#results').classList.remove('show');showWait('You’re in! 🎉','Waiting for your teacher to start the battle. Warm up below. Warm-up answers don’t count.',true)}
     else if(!resOpen)showWait('A new game is ready',matchSummary(match),false,true);return}
   if(ph==='countdown'||ph==='running'){
     if(myMid!==match.id&&wantJoin){if(match.mode==='deathmatch'&&srvNow()>match.startAt+15000){showWait('Battle already under way','This is a last-tank-standing game, so you’ll join the next one. Warm up below!');return}resetForGame()}
@@ -611,16 +630,18 @@ function syncPupil(){if(teacherView||solo||!entered)return;const ph=phase(),resO
   if(!resOpen)showWait(wantJoin?'Waiting for the next game':'Game over',wantJoin?'Your teacher will restart the game soon.':'Press play again to wait for the next game.',false,!wantJoin)}
 setInterval(()=>{syncPupil();if($('#wait').classList.contains('show')&&!$('#wList').hidden)fillWaitList()},1000);
 $('#wJoin').onclick=()=>{wantJoin=true;$('#results').classList.remove('show');syncPupil()};
-function participants(){const rows=[];if(me.playing&&!teacherView)rows.push({nm:me.name,col:me.color,k:me.kills,c:me.correct,out,me:true});
-  for(const p of playingPeers()){const pr=p.presence;if(pr.mid!==match.id)continue;rows.push({nm:String(pr.nm||'Pupil').slice(0,16),col:/^#[0-9a-fA-F]{6}$/.test(pr.col)?pr.col:'#888',k:num(pr.k),c:num(pr.c),out:!!pr.out})}
+function participants(){const rows=[];if(me.playing&&!teacherView)rows.push({nm:me.name,col:me.color,k:me.kills,c:me.correct,out,me:true,tm:me.team});
+  for(const p of playingPeers()){const pr=p.presence;if(pr.mid!==match.id)continue;rows.push({nm:String(pr.nm||'Pupil').slice(0,16),col:/^#[0-9a-fA-F]{6}$/.test(pr.col)?pr.col:'#888',k:num(pr.k),c:num(pr.c),out:!!pr.out,tm:pr.tm})}
   rows.forEach(r=>r.s=r.k*10+r.c);return rows.sort((a,b)=>b.s-a.s)}
 function endMatch(reason,winner){if(endedId===match.id)return;endedId=match.id;const wasDM=match.mode==='deathmatch';
-  const rows=[];if(myMid===match.id&&!teacherView)rows.push({nm:me.name,col:me.color,k:me.kills,c:me.correct,out,me:true});
-  for(const p of playingPeers()){const pr=p.presence;if(pr.mid===match.id)rows.push({nm:String(pr.nm||'Pupil').slice(0,16),col:/^#[0-9a-fA-F]{6}$/.test(pr.col)?pr.col:'#888',k:num(pr.k),c:num(pr.c),out:!!pr.out})}
+  const rows=[];if(myMid===match.id&&!teacherView)rows.push({nm:me.name,col:me.color,k:me.kills,c:me.correct,out,me:true,tm:me.team});
+  for(const p of playingPeers()){const pr=p.presence;if(pr.mid===match.id)rows.push({nm:String(pr.nm||'Pupil').slice(0,16),col:/^#[0-9a-fA-F]{6}$/.test(pr.col)?pr.col:'#888',k:num(pr.k),c:num(pr.c),out:!!pr.out,tm:pr.tm})}
   rows.forEach(r=>r.s=r.k*10+r.c);rows.sort((a,b)=>wasDM?((a.out-b.out)||(b.s-a.s)):(b.s-a.s));finalRows=rows;
+  const tot={blue:0,pink:0};rows.forEach(r=>{if(TEAMS[r.tm])tot[r.tm]+=r.s});const teamGame=teamOn()&&rows.some(r=>TEAMS[r.tm]);
+  if(!winner&&teamGame&&!wasDM)winner=tot.blue===tot.pink?'It’s a draw!':'🏆 '+(tot.blue>tot.pink?'Blue':'Pink')+' team wins!';
   if(!winner){if(wasDM){const st=rows.filter(r=>!r.out).map(r=>r.nm);winner=st.length?'Still standing: '+st.join(', '):'Match over'}else winner=rows.length?'🏆 '+rows[0].nm+' wins!':'Game over'}
   const title=wasDM?winner:(reason.startsWith('Time')?'Time’s up! ':'')+winner;
-  if(!teacherView&&myMid===match.id){$('#rTitle').textContent=title;$('#rSub').textContent=reason+(wasDM?'':' Points: 10 per knockout, 1 per right answer.');
+  if(!teacherView&&myMid===match.id){$('#rTitle').textContent=title;$('#rSub').textContent=reason+(teamGame?' Blue '+tot.blue+' · Pink '+tot.pink+'.':'')+(wasDM?'':' Points: 10 per knockout, 1 per right answer.');
     const ol=$('#rList');ol.replaceChildren();rows.forEach(r=>{const li=document.createElement('li');if(r.me)li.className='me';const d=document.createElement('span');d.className='dot';d.style.background=r.col;
       const n=document.createElement('span');n.className='n';n.textContent=r.nm;const b=document.createElement('b');b.textContent=r.s+' pts';li.append(d,n,b);ol.appendChild(li)});
     hideWait();$('#results').classList.add('show')}
@@ -659,8 +680,12 @@ function setupForm(el,m,onChange){el.replaceChildren();
   if(!m.handicap){if(!Array.isArray(m.tables)||!m.tables.length)m.tables=[2,3,4,5,10];r=sec('Times tables to practise');
     for(let n=2;n<=12;n++)opt(r,String(n),m.tables.includes(n),()=>{const i=m.tables.indexOf(n);if(i>=0){if(m.tables.length>1)m.tables.splice(i,1)}else m.tables.push(n);m.tables.sort((a,b)=>a-b)});
     opt(r,'All',m.tables.length===11,()=>{m.tables=[2,3,4,5,6,7,8,9,10,11,12]})}
+  r=sec('Maths per shot');[['less','Less maths'],['mid','Balanced'],['more','More maths']].forEach(([k,l])=>opt(r,l,(m.maths||'mid')===k,()=>m.maths=k));
+  const mn=document.createElement('p');mn.className='note';const mm=MATHS[m.maths]||MATHS.mid;mn.textContent='Each right answer loads '+mm.s+' shell'+(mm.s>1?'s':'')+' ('+mm.f+' if quick). '+({less:'More time battling.',mid:'An even mix of maths and battling.',more:'Pupils answer lots of questions to keep firing.'}[m.maths||'mid']);el.appendChild(mn);
+  if(!solo){r=sec('Teams');opt(r,'Everyone for themselves',!m.teams,()=>m.teams=false);opt(r,'🔵 Blue v Pink 🩷',!!m.teams,()=>m.teams=true);
+    if(m.teams){const tn=document.createElement('p');tn.className='note';tn.textContent='Pupils pick a team in the lobby and the teams are kept even. Turrets only lock on to the other team, so there’s no friendly fire. Bots attack everyone.';el.appendChild(tn)}}
   r=sec('Forts');opt(r,'🏰 On',m.forts!==false,()=>m.forts=true);opt(r,'Off',m.forts===false,()=>m.forts=false)}
-function matchSummary(m){const bits=[MAPS[m.map].e+' '+MAPS[m.map].n,MODES[m.mode]+(m.mode==='timed'?' ('+Math.round(m.dur/60)+' min)':''),m.handicap?'Handicap':'Tables: '+(cleanTables(m.tables).join(', ')||'2, 3, 4, 5, 10'),'Forts '+(m.forts!==false?'on':'off')];return bits.join(' · ')}
+function matchSummary(m){const bits=[MAPS[m.map].e+' '+MAPS[m.map].n,MODES[m.mode]+(m.mode==='timed'?' ('+Math.round(m.dur/60)+' min)':''),m.handicap?'Handicap':'Tables: '+(cleanTables(m.tables).join(', ')||'2, 3, 4, 5, 10'),'Forts '+(m.forts!==false?'on':'off')].concat(m.teams?['Blue v Pink']:[],m.maths==='more'?['More maths']:m.maths==='less'?['Less maths']:[]);return bits.join(' · ')}
 function refreshStart(){$('#soloSetup').hidden=!solo;if(solo&&!$('#soloSetup').childElementCount)setupForm($('#soloSetup'),localMatch);
   const mi=$('#matchInfo');mi.hidden=solo;$('#go').textContent=solo?'Start':(entered?'Back to the game':'Join the lobby');
   if(!solo){mi.replaceChildren();const b=document.createElement('b');const ph=phase();
@@ -668,7 +693,7 @@ function refreshStart(){$('#soloSetup').hidden=!solo;if(solo&&!$('#soloSetup').c
 
 /* ================= START SCREEN ================= */
 const tables=new Set([2,3,4,5,10]);
-(()=>{const sw=$('#swatches');COLORS.forEach((c,i)=>{const b=document.createElement('button');b.className='sw';b.style.background=c;b.setAttribute('aria-label','Colour '+(i+1));b.setAttribute('aria-pressed',i===0);b.onclick=()=>{me.color=c;sw.querySelectorAll('.sw').forEach(x=>x.setAttribute('aria-pressed',x===b))};sw.appendChild(b)});
+(()=>{const sw=$('#swatches');COLORS.forEach((c,i)=>{const b=document.createElement('button');b.className='sw';b.style.background=c;b.setAttribute('aria-label','Colour '+(i+1));b.setAttribute('aria-pressed',i===0);b.onclick=()=>{me.baseColor=c;applyTeamColor();sw.querySelectorAll('.sw').forEach(x=>x.setAttribute('aria-pressed',x===b))};sw.appendChild(b)});
   const tb=$('#tables');for(let n=2;n<=12;n++){const b=document.createElement('button');b.className='tb';b.textContent=n;b.setAttribute('aria-pressed',tables.has(n));
     b.onclick=()=>{if(tables.has(n)){if(tables.size>1)tables.delete(n)}else tables.add(n);b.setAttribute('aria-pressed',tables.has(n))};tb.appendChild(b)}
   const all=document.createElement('button');all.className='tb';all.textContent='All';all.onclick=()=>{for(let n=2;n<=12;n++)tables.add(n);tb.querySelectorAll('.tb').forEach(x=>{if(x!==all)x.setAttribute('aria-pressed','true')})};tb.appendChild(all)})();
@@ -717,8 +742,8 @@ function submit(){const ok=Number(typed)===q.ans,secs=(now()-qStart)/1000,fb=$('
   const dm=match.mode==='deathmatch';
   if(ok){const fast=secs<4,inF=me.fort>=0;streak++;let msg;
     if(!inGame){msg=out?'✅ Nice! You’re out this round, but keep practising':'✅ Warm-up: nice!'}
-    else{me.correct++;let shells=(fast?5:3)*(inF?2:1);const heal=dm?0:(inF?25:(fast?15:10));msg=(inF?'🏰 ':'✅ ')+'+'+shells+' shells';
-      if(streak%5===0){shells+=5;msg='🔥 '+streak+' in a row! +'+shells+' shells'}
+    else{me.correct++;const MM=MATHS[match.maths]||MATHS.mid;let shells=(fast?MM.f:MM.s)*(inF?2:1);const heal=dm?0:(inF?MM.hf+10:(fast?MM.hf:MM.h));msg=(inF?'🏰 ':'✅ ')+'+'+shells+' shells';
+      if(streak%5===0){shells+=MM.b;msg='🔥 '+streak+' in a row! +'+shells+' shells'}
       me.ammo=Math.min(inF?99:60,me.ammo+shells);
       if(me.dead){me.rebuild++;msg='🔧 Rebuilding… '+me.rebuild+'/3'}else if(heal){me.hp=Math.min(100,me.hp+heal);msg+=', +'+heal+' armour'}
       if(fast&&!me.dead)msg+=' ⚡'}
@@ -744,7 +769,7 @@ const fUp=()=>{fireHeld=false;fbtn.classList.remove('held')};fbtn.addEventListen
 
 /* ================= COMBAT ================= */
 function enemies(){const l=[];
-  for(const p of peersSnap){if(p.sameTab)continue;const pr=p.presence;if(!pr||pr.v!==1||pr.dead||pr.out||isFort(pr))continue;const s=rs.get(p.peer);if(s)l.push({id:p.peer,x:s.x,y:s.y})}
+  for(const p of peersSnap){if(p.sameTab)continue;const pr=p.presence;if(!pr||pr.v!==1||pr.dead||pr.out||isFort(pr))continue;if(teamOn()&&me.team&&pr.tm===me.team)continue;const s=rs.get(p.peer);if(s)l.push({id:p.peer,x:s.x,y:s.y})}
   (iAmHost?bots:rbots).forEach((b,i)=>{if(b&&!b.dead)l.push({id:'@'+i,x:b.x,y:b.y})});return l}
 function tryFire(){if(!me.playing||me.dead||out||fireCd>0)return;const t0=now();
   if(phase()==='countdown'){if(t0-lastNoAmmo>1300){lastNoAmmo=t0;toast('Wait for GO! Answer questions to stock up')}return}
@@ -765,8 +790,8 @@ function damageBot(i,d,by){const b=bots[i];if(!b||b.dead)return;b.hp-=d;puff(b.x
   if(b.hp<=0){b.dead=true;b.respawn=5;boom(b.x,b.y,'#8B95A7');if(by==='me')creditKill('a robot tank');else koOut.push({by,n:++koSeq,t:now(),b:1})}}
 function newBot(){const s=freeSpot();return{x:s.x,y:s.y,a:Math.random()*PI2,ta:0,hp:60,dead:false,respawn:0,cd:1+Math.random()*2,think:0,tgt:null,path:null,side:Math.random()<.5?1:-1,stuck:0}}
 function updateBots(dt,humansN){const ph=phase(),dm=botDM();
-  if(dm){if(botsFor!==match.id){botsFor=match.id;bots=[];const n=clamp(8-humansN,2,6);for(let i=0;i<n;i++)bots.push(newBot())}}
-  else{botsFor=null;const want=Math.max(4,10-humansN);while(bots.length<want)bots.push(newBot());while(bots.length>want)bots.pop()}
+  if(dm){if(botsFor!==match.id&&phase()==='running'){botsFor=match.id;bots=[];const n=clamp(5-humansN,1,4);for(let i=0;i<n;i++)bots.push(newBot())}}
+  else{botsFor=null;const want=Math.max(2,6-humansN);while(bots.length<want)bots.push(newBot());while(bots.length>want)bots.pop()}
   const humans=[];if(me.playing&&!me.dead&&!out&&me.fort<0)humans.push({id:'me',x:me.x,y:me.y,self:true});
   for(const p of peersSnap){if(p.sameTab)continue;const pr=p.presence;if(!pr||pr.v!==1||pr.dead||pr.out||isFort(pr))continue;const s=rs.get(p.peer);if(s)humans.push({id:p.peer,x:s.x,y:s.y})}
   for(const b of bots){
@@ -872,12 +897,16 @@ function checkMatch(){const ph=phase(),chip=$('#modeChip'),cd=$('#cd');let txt='
     else if(match.mode==='deathmatch'){const alive=[];if(me.playing&&!out&&!teacherView)alive.push(me.name);for(const p of playingPeers()){const pr=p.presence;if(pr.mid===match.id&&!pr.out)alive.push(String(pr.nm||'Pupil').slice(0,16))}
       const botsAlive=(iAmHost?bots:rbots).filter(b=>b&&!b.dead).length;txt='🛡 '+(alive.length+botsAlive)+' tanks left';
       if(srvNow()-match.startAt>6000){if(alive.length===0)finish('Every pupil’s tank was knocked out.','The robot tanks win!');
+        else if(teamOn()){const all=new Set(),at=new Set();if(me.playing&&!teacherView&&TEAMS[me.team]){all.add(me.team);if(!out)at.add(me.team)}
+          for(const p of playingPeers()){const pr=p.presence;if(pr.mid===match.id&&TEAMS[pr.tm]){all.add(pr.tm);if(!pr.out)at.add(pr.tm)}}
+          if(all.size>=2&&at.size===1){const t=[...at][0];finish('Every tank on the other team was knocked out.','🏆 '+TEAMS[t].n+' team wins!')}
+          else if(all.size<2&&alive.length+botsAlive<=1)finish('What a battle!','🏆 '+alive[0]+' is the last tank standing!')}
         else if(alive.length+botsAlive<=1)finish('What a battle!','🏆 '+alive[0]+' is the last tank standing!')}}
     else txt='Free play'}
   if(txt!==chipCache){chipCache=txt;chip.hidden=!txt;chip.textContent=txt}}
 function sendPresence(){if(!room||teacherView||!entered)return;const t=now();dmgOut=dmgOut.filter(e=>t-e.t<3000);koOut=koOut.filter(e=>t-e.t<6000);
   const bl=bullets.slice(-10).map(b=>[Math.round(b.x),Math.round(b.y)]);if(iAmHost)for(const b of botBullets.slice(-12))bl.push([Math.round(b.x),Math.round(b.y),1]);
-  room.presence({v:1,st:me.playing?'play':(myMid===match.id?'lobby':'wait'),nm:me.name,col:me.color,x:Math.round(me.x),y:Math.round(me.y),a:+me.a.toFixed(2),ta:+me.ta.toFixed(2),hp:Math.round(me.hp),k:me.kills,c:me.correct,
+  room.presence({v:1,st:me.playing?'play':(myMid===match.id?'lobby':'wait'),nm:me.name,col:me.color,tm:teamOn()?me.team:'',x:Math.round(me.x),y:Math.round(me.y),a:+me.a.toFixed(2),ta:+me.ta.toFixed(2),hp:Math.round(me.hp),k:me.kills,c:me.correct,
     ans:me.ans,ts:me.ans?+(me.tsum/me.ans).toFixed(1):0,lv:match.handicap?level:0,am:me.ammo,ff:me.forced,dead:me.dead,out,mid:myMid,fort:me.fort,uid:myKey(),bl,
     dmg:dmgOut.slice(-12).map(e=>e.s?{to:e.to,i:e.i,d:e.d,s:1}:{to:e.to,i:e.i,d:e.d}),ko:koOut.slice(-8).map(e=>e.b?{by:e.by,n:e.n,b:1}:{by:e.by,n:e.n}),
     bots:iAmHost&&me.playing?bots.map(b=>[Math.round(b.x),Math.round(b.y),+b.a.toFixed(2),+b.ta.toFixed(2),b.dead?0:Math.round(b.hp)]):null}).catch(()=>{})}
@@ -885,7 +914,7 @@ let hudCache='';
 function updateHud(){const s=me.hp+'|'+me.ammo+'|'+me.kills;if(s===hudCache)return;hudCache=s;const bar=$('#hpbar');bar.style.width=me.hp+'%';bar.style.background=me.hp>50?'var(--good)':me.hp>25?'var(--amber)':'var(--bad)';
   $('#ammo').textContent=me.ammo;$('#fireAmmo').textContent=me.ammo;$('#kills').textContent=me.kills}
 function updateBoard(){const rows=participants();const ol=$('#boardList');ol.replaceChildren();const lim=vw<500?4:8;
-  $('#boardTitle').textContent=MODES[match.mode]||'Leaderboard';
+  if(teamOn()){const t={blue:0,pink:0};rows.forEach(r=>{if(TEAMS[r.tm])t[r.tm]+=r.s});$('#boardTitle').textContent='🔵 '+t.blue+'  ·  🩷 '+t.pink}else $('#boardTitle').textContent=MODES[match.mode]||'Leaderboard';
   rows.slice(0,lim).forEach(r=>{const li=document.createElement('li');li.className=(r.me?'me':'')+(r.out&&match.mode==='deathmatch'?' outp':'');const d=document.createElement('span');d.className='dot';d.style.background=r.col;
     const n=document.createElement('span');n.className='n';n.textContent=r.nm+(r.me?' (you)':'');const b=document.createElement('b');b.textContent=r.s;li.append(d,n,b);ol.appendChild(li)});
   $('#board').style.display=rows.length?'':'none'}
@@ -942,7 +971,7 @@ function render(){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=T.desk;ctx.fil
   if(me.playing&&!me.dead&&!out)drawTank(me.x,me.y,me.a,me.ta,me.color,me.hp,100,me.name,true,false,me.fort>=0);
   for(const p of particles){ctx.globalAlpha=clamp(p.life/p.max,0,1);dot(p.x,p.y,p.col,p.r)}ctx.globalAlpha=1;ctx.restore();
   if(joy.id!==null){ctx.globalAlpha=.35;dot(joy.ox,joy.oy,T.ink,52);ctx.globalAlpha=.7;dot(joy.x,joy.y,T.paper,26);ctx.globalAlpha=1}
-  const mw=120,mh=84,mx=vw-mw-10,my=10,f=mw/W;
+  const mw=120,mh=Math.round(120*H/W),mx=vw-mw-10,my=10,f=mw/W;
   ctx.fillStyle=T.paper;ctx.globalAlpha=.92;rr(mx,my,mw,mh,8);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=T.grid2;ctx.lineWidth=1.5;ctx.stroke();
   for(const l of lakes)dot(mx+l.x*f,my+l.y*f,T.water,l.r*f);
   ctx.fillStyle='#C99A5B';for(const o of FORTS){ctx.beginPath();ctx.arc(mx+o.x*f,my+o.y*f,FORT_R*f,0,PI2);ctx.fill()}
@@ -987,7 +1016,13 @@ function writeMatch(body,msg){$('#dSave').textContent='Sending to the class…';
 let setupTimer=0;function onSetupChange(){if(phase()==='lobby'){clearTimeout(setupTimer);setupTimer=setTimeout(()=>writeMatch({...match,...pickSettings(dMatch)},'Lobby updated ✓'),400)}}
 $('#dOpen').onclick=()=>writeMatch({id:newId(),...pickSettings(dMatch),state:'lobby',startAt:0,winner:'',reason:''},'Lobby open ✓ Share the link with your class');
 $('#dRestart').onclick=()=>writeMatch({id:newId(),...pickSettings(dMatch),state:'lobby',startAt:0,winner:'',reason:''},'New lobby open ✓ Pupils who press Play again will appear here');
-$('#dStart').onclick=()=>{if(!gamePeers().length){$('#dSave').textContent='Wait for at least one pupil to join first.';return}writeMatch({...match,...pickSettings(dMatch),state:'running',startAt:srvNow()+5000},'Battle starting in 5 seconds ✓')};
+function balanceTeams(){if(!match.teams||!room)return 0;const gp=gamePeers(),by={blue:[],pink:[],none:[]};gp.forEach(p=>{const t=p.presence.tm;(by[TEAMS[t]?t:'none']).push(p.peer)});
+  const moves=[];by.none.forEach(pid=>{const t=by.blue.length<=by.pink.length?'blue':'pink';by[t].push(pid);moves.push([pid,t])});
+  while(Math.abs(by.blue.length-by.pink.length)>1){const from=by.blue.length>by.pink.length?'blue':'pink',to=from==='blue'?'pink':'blue';const pid=by[from].pop();by[to].push(pid);moves.push([pid,to])}
+  moves.forEach(([pid,t])=>room.emit('cmd',{to:pid,act:'team',tm:t}).catch(()=>{}));return moves.length}
+$('#dStart').onclick=()=>{if(!gamePeers().length){$('#dSave').textContent='Wait for at least one pupil to join first.';return}
+  if(!$('#dStart').dataset.bal&&balanceTeams()){$('#dStart').dataset.bal='1';$('#dSave').textContent='Evening up the teams…';setTimeout(()=>$('#dStart').onclick(),900);return}delete $('#dStart').dataset.bal;
+  writeMatch({...match,...pickSettings(dMatch),state:'running',startAt:srvNow()+5000},'Battle starting in 5 seconds ✓')};
 $('#dEnd').onclick=()=>finish('Your teacher ended the game.');
 $('#dCopy').onclick=async()=>{const inp=$('#dLink');try{await navigator.clipboard.writeText(window.TT_PUPIL_LINK);$('#dCopy').textContent='Copied ✓'}catch(e){inp.focus();inp.select();$('#dCopy').textContent='Press Ctrl+C'}setTimeout(()=>{$('#dCopy').textContent='Copy link'},2000)};
 $('#dReleaseAll').onclick=()=>{if(room)room.emit('cmd',{to:'*',act:'release'}).catch(()=>toast('Couldn’t reach the pupils'))};
@@ -1007,9 +1042,9 @@ function renderDash(force){if(!teacherView)return;const ph=phase();
     $('#dStatus').textContent={none:'Choose your settings, then open the lobby to get the link for your pupils.',lobby:'Lobby open · '+matchSummary(match),countdown:'Starting… · '+matchSummary(match),running:'Battle on · '+matchSummary(match),ended:'Game finished'}[ph];
     if(ph==='ended'){const ol=$('#dResults');ol.replaceChildren();$('#dWinner').textContent=match.winner||'';(finalRows||[]).forEach(r=>{const li=document.createElement('li');const d=document.createElement('span');d.className='dot';d.style.background=r.col;const n=document.createElement('span');n.className='n';n.textContent=r.nm;const b=document.createElement('b');b.textContent=r.s+' pts';li.append(d,n,b);ol.appendChild(li)});
       if(!(finalRows||[]).length){const li=document.createElement('li');li.textContent='Results appear here when a game ends while this page is open.';ol.appendChild(li)}}}
-  if(ph==='lobby'){const gp=gamePeers();const sig='L'+gp.map(p=>p.peer+p.presence.nm).join();if(sig!==dashSig){dashSig=sig;const l=$('#dLobby');l.replaceChildren();
-      gp.forEach(p=>{const c=document.createElement('span');c.className='namechip';c.style.borderColor=p.presence.col;c.textContent=String(p.presence.nm||'Pupil').slice(0,16);l.appendChild(c)});
-      $('#dLobbyCount').textContent=gp.length?gp.length+' pupil'+(gp.length>1?'s':'')+' ready':'Nobody yet. Share the link above.';$('#dStart').disabled=!gp.length}}
+  if(ph==='lobby'){const gp=gamePeers();const sig='L'+match.teams+gp.map(p=>p.peer+p.presence.nm+p.presence.tm).join();if(sig!==dashSig){dashSig=sig;const l=$('#dLobby');l.replaceChildren();
+      gp.forEach(p=>{const c=document.createElement('span');c.className='namechip';c.style.borderColor=p.presence.col;if(match.teams&&TEAMS[p.presence.tm])c.style.color=TEAMS[p.presence.tm].c;c.textContent=String(p.presence.nm||'Pupil').slice(0,16);l.appendChild(c)});
+      $('#dLobbyCount').textContent=gp.length?gp.length+' pupil'+(gp.length>1?'s':'')+' ready'+(match.teams?' · Blue '+gp.filter(p=>p.presence.tm==='blue').length+' · Pink '+gp.filter(p=>p.presence.tm==='pink').length+' (evened up automatically when you start)':''):'Nobody yet. Share the link above.';$('#dStart').disabled=!gp.length}}
   if(ph==='running'||ph==='countdown'){const rows=gamePeers().map(pupilStats).sort((a,b)=>(b.struggling-a.struggling)||a.nm.localeCompare(b.nm));
     const sig='R'+watchPeer+JSON.stringify(rows);if(sig===dashSig)return;dashSig=sig;const box=$('#dLive');box.replaceChildren();
     $('#dNeed').textContent=rows.filter(r=>r.struggling).length?rows.filter(r=>r.struggling).length+' finding it tricky':'';
